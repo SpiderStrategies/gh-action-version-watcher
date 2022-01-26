@@ -51,7 +51,7 @@ async function runAction() {
 		await execCmd(`git checkout --ours ${versionFile}`)
 		const conflicts = await execCmd(`git diff --name-only --diff-filter=U`)
 		// Whoops, there are conflicts that require a human, abort
-		if (conflicts.length > 0) {
+		if (conflicts && conflicts.length > 0) {
 			core.warning(`Conflicts found:\n`, conflicts)
 			return
 		}
