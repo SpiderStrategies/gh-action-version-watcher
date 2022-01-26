@@ -9,6 +9,7 @@
   "dependencies": {
     "@actions/core": "^1.6.0",
     "@actions/github": "^5.0.0",
+    "gh-action-components": "git+ssh://git@github.com/SpiderStrategies/gh-action-components#master",
     "ncc": "^0.3.6"
   }
 }

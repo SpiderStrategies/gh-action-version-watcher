@@ -7,7 +7,7 @@ const core = require('@actions/core')
 const github = require('@actions/github')
 
 // Shared modules
-const configReader = require('./config-reader')
+const { configReader } = require('gh-action-components')
 
 // Inputs
 const configFile = core.getInput('config-file', { required: true });

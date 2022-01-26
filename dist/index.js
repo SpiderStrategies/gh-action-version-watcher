@@ -1,88 +1,6 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 2601:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-const { readFileSync } = __nccwpck_require__(7147)
-
-/**
- * @typedef Configuration
- *
- * @property {Object} config The config object as it was provided
- *
- * @property {Array<String>} mergeTargets An ordered array of branches that a
- * change should be merged forward into. (e.g. releases in chronological order)
- *
- * @property {Object} branchNameByMilestoneNumber e.g. { 1: 'release-2022' }
- */
-
-/**
- * Reads the config file and (re)structures data in useful ways.
- *
- * @param configFileLocation
- * @param {String} options.baseBranch
- *
- * @returns {Configuration}
- */
-function configReader(configFileLocation, options = {}) {
-	const config = JSON.parse(readFileSync(configFileLocation))
-
-	const data = {
-		mergeTargets: buildMergeTargets(config, options),
-		branchNameByMilestoneNumber: branchNameByMilestone(config)
-	}
-
-	return {
-		config,
-		...data
-	}
-}
-
-function buildMergeTargets(config, options) {
-	const mergeTargets = []
-	const {mergeOperations} = config
-	let branchTarget = mergeOperations[options.baseBranch || 0]
-	while (branchTarget) {
-		mergeTargets.push(branchTarget)
-		branchTarget = mergeOperations[branchTarget]
-	}
-
-	return mergeTargets
-}
-
-/**
- * Get a mapping of milestonNumber to the release branch the milestone is assigned to.
- *
- * @param {Object} config.branches
- * "branches": {
- *     "release-2020-commercial": {
- *       "alias": "2020",
- *       "milestoneNumber": 1
- *     },
- *     ...
- * }
- *
- * @returns {Object}
- * {
- *     1: "release-2020-commercial"
- * }
- */
-function branchNameByMilestone(config) {
-	const returnValue = {}
-	Object.entries(config.branches).forEach(entry => {
-		const [branchName, props] = entry;
-		const { milestoneNumber } = props
-		returnValue[milestoneNumber] = branchName
-	})
-	return returnValue
-}
-
-
-module.exports = configReader
-
-/***/ }),
-
 /***/ 6840:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -4070,6 +3988,101 @@ class Deprecation extends Error {
 
 exports.Deprecation = Deprecation;
 
+
+/***/ }),
+
+/***/ 1917:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const { readFileSync } = __nccwpck_require__(7147)
+
+/**
+ * @typedef Configuration
+ *
+ * @property {Object} config The config object as it was provided
+ *
+ * @property {Array<String>} mergeTargets An ordered array of branches that a
+ * change should be merged forward into. (e.g. releases in chronological order)
+ *
+ * @property {Object} branchNameByMilestoneNumber e.g. { 1: 'release-2022' }
+ */
+
+/**
+ * Reads the config file and (re)structures data in useful ways.
+ *
+ * @param configFileLocation
+ * @param {String} options.baseBranch
+ *
+ * @returns {Configuration}
+ */
+function configReader(configFileLocation, options = {}) {
+	const config = JSON.parse(readFileSync(configFileLocation))
+
+	const data = {
+		mergeTargets: buildMergeTargets(config, options),
+		branchNameByMilestoneNumber: branchNameByMilestone(config)
+	}
+
+	return {
+		config,
+		...data
+	}
+}
+
+function buildMergeTargets(config, options) {
+	const mergeTargets = []
+	const {mergeOperations} = config
+	let branchTarget = mergeOperations[options.baseBranch || 0]
+	while (branchTarget) {
+		mergeTargets.push(branchTarget)
+		branchTarget = mergeOperations[branchTarget]
+	}
+
+	return mergeTargets
+}
+
+/**
+ * Get a mapping of milestonNumber to the release branch the milestone is assigned to.
+ *
+ * @param {Object} config.branches
+ * "branches": {
+ *     "release-2020-commercial": {
+ *       "alias": "2020",
+ *       "milestoneNumber": 1
+ *     },
+ *     ...
+ * }
+ *
+ * @returns {Object}
+ * {
+ *     1: "release-2020-commercial"
+ * }
+ */
+function branchNameByMilestone(config) {
+	const returnValue = {}
+	Object.entries(config.branches).forEach(entry => {
+		const [branchName, props] = entry;
+		const { milestoneNumber } = props
+		returnValue[milestoneNumber] = branchName
+	})
+	return returnValue
+}
+
+
+module.exports = configReader
+
+/***/ }),
+
+/***/ 6139:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const configReader = __nccwpck_require__(1917)
+const findIssueNumber = __nccwpck_require__(3042)
+
+module.exports = {
+	configReader,
+	findIssueNumber
+}
 
 /***/ }),
 
@@ -8389,6 +8402,14 @@ module.exports = eval("require")("encoding");
 
 /***/ }),
 
+/***/ 3042:
+/***/ ((module) => {
+
+module.exports = eval("require")("find-issue-number");
+
+
+/***/ }),
+
 /***/ 9491:
 /***/ ((module) => {
 
@@ -8567,7 +8588,7 @@ const core = __nccwpck_require__(8460)
 const github = __nccwpck_require__(8369)
 
 // Shared modules
-const configReader = __nccwpck_require__(2601)
+const { configReader } = __nccwpck_require__(6139)
 
 // Inputs
 const configFile = core.getInput('config-file', { required: true });
