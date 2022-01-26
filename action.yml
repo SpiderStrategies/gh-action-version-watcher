@@ -1,0 +1,15 @@
+name: 'Version Watcher'
+description: 'Look for pushes with only a change to version.properties'
+inputs:
+ config-file:
+   description: 'The location of the branch config file'
+   required: true
+ version-file:
+   description: 'The location of the version file relative to the root of the repo'
+   required: true
+ dry-run:
+   description: 'Setting dry-run to true will prevent the action from executing git commands with side effects and instead just log what it would have run.'
+   required: false
+runs:
+  using: 'node12'
+  main: 'dist/index.js'
