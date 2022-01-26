@@ -36,14 +36,18 @@ jobs:
 ```
 
 # Development
-Steps to publish and test updates to this action.
+
+## One time setup
+
+This uses [Nekos Act](https://github.com/nektos/act) and can be installed by running `brew install act`
+
+### Steps to publish and test updates to this action.
 
 1. Make the appropriate changes to the source (e.g. `index.js`)
 2. Build the dist: `npm run build` (`npm install` if you haven't already)
 3. Commit and push the changes
 4. From a project that depends on this action you can run:
    - `act -j version-watcher -s GITHUB_TOKEN=$GHACTION_SECRET -e push-event.json`
-   - This uses [Nekos Act](https://github.com/nektos/act) and can be installed by running `brew install act`
    - This is an easy way to iterate over changes that require the entire workflow to run locally without having to rely on GitHub to run your action.  Just capture a real event to a local json file and pass it as the `-e` argument.
 
 Note: we're not formally publishing a versioned action, so we can just refer to the `master` branch from other projects (e.g. `Scoreboard`)
