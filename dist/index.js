@@ -8760,7 +8760,7 @@ class VersionWatcherAction extends BaseAction {
 	async runAction() {
 
 		// Is it the only file changed?
-		const filesChanged = await this.exec(`git diff ${before}...${head_commit.id} --name-only | wc 1`)
+		const filesChanged = await this.exec(`git diff ${before}...${head_commit.id} --name-only | wc -l`)
 		if (filesChanged > 1) {
 			core.warning("Multiple files detected in diff")
 			return // Don't fail the action, just exit successfully
