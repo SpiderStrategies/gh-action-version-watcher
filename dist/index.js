@@ -8770,16 +8770,21 @@ class VersionWatcherAction extends BaseAction {
 		const targets = configData.mergeTargets
 		for await (const branch of targets) {
 			await this.exec(`git checkout ${branch}`)
+			await this.exec(`git pull`)
 			// stage the changes
 			await this.exec(`git merge ${head_commit.id} --no-commit`)
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${versionFile}`)
+			// See if we still have conflicts remaining
 			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
 			// Whoops, there are conflicts that require a human, abort
 			if (conflicts && conflicts.length > 0) {
 				core.warning(`Conflicts found:\n${conflicts}`)
 				return
 			}
+			// clean up index before moving on to next branch
+			await this.exec(`git reset --hard`)
+
 		}
 	}
 }
