@@ -3994,7 +3994,9 @@ exports.Deprecation = Deprecation;
 /***/ 7008:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const { exec } = __nccwpck_require__(2081)
+const util = __nccwpck_require__(3837)
+const exec = util.promisify((__nccwpck_require__(2081).exec))
+
 
 const core = __nccwpck_require__(8460)
 const github = __nccwpck_require__(8369)
@@ -4054,8 +4056,11 @@ class BaseAction {
 			core.info(`dry run: ${cmd}`)
 		} else {
 			core.info(`Running: ${cmd}`)
-			const response = await exec(cmd)
-			return response.toString().trim()
+			const { stdout, stderr } = await exec(cmd);
+			if (stderr) {
+				core.warning(stderr)
+			}
+			return stdout.toString().trim()
 		}
 	}
 
@@ -8769,7 +8774,7 @@ class VersionWatcherAction extends BaseAction {
 			await this.exec(`git merge ${head_commit.id} --no-commit`)
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${versionFile}`)
-			const conflicts = await this.exec(`git --no-pager diff --name-only --diff-filter=U`)
+			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
 			// Whoops, there are conflicts that require a human, abort
 			if (conflicts && conflicts.length > 0) {
 				core.warning(`Conflicts found:\n${conflicts}`)
