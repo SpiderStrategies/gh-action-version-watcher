@@ -40,7 +40,7 @@ class VersionWatcherAction extends BaseAction {
 			await this.exec(`git checkout --ours ${versionFile}`)
 			const conflicts = await this.exec(`git --no-pager diff --name-only --diff-filter=U`)
 			// Whoops, there are conflicts that require a human, abort
-			if (conflicts && conflicts.length > 0) {
+			if (conflicts && conflicts.length > 0 && conflicts !== '%0A' /* line feed */) {
 				core.warning(`Conflicts found:\n`, conflicts)
 				return
 			}
