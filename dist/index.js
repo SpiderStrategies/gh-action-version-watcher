@@ -8769,7 +8769,7 @@ class VersionWatcherAction extends BaseAction {
 			await this.exec(`git merge ${head_commit.id} --no-commit`)
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${versionFile}`)
-			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
+			const conflicts = await this.exec(`git --no-pager diff --name-only --diff-filter=U`)
 			// Whoops, there are conflicts that require a human, abort
 			if (conflicts && conflicts.length > 0) {
 				core.warning(`Conflicts found:\n`, conflicts)
