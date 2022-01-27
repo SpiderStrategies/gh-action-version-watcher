@@ -3991,6 +3991,105 @@ exports.Deprecation = Deprecation;
 
 /***/ }),
 
+/***/ 7008:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const util = __nccwpck_require__(3837)
+const exec = util.promisify((__nccwpck_require__(2081).exec))
+
+
+const core = __nccwpck_require__(8460)
+const github = __nccwpck_require__(8369)
+
+const dryRun = core.getInput('dry-run');
+const context = github.context;
+const { repository } = context.payload
+
+// Setup Octokit
+let octokit
+const repoToken = core.getInput('repo-token')
+if (repoToken) {
+	octokit = github.getOctokit(repoToken)
+}
+// If the event has a repository extract the attributes
+let repoOwnerParams = {}
+if (repository) {
+	repoOwnerParams = {
+		owner: repository.owner.login,
+		repo: repository.name
+	}
+}
+
+/**
+ * Common operations actions will invoke upon an instance of an action
+ */
+class BaseAction {
+
+	/**
+	 * Runs the action
+	 * @returns {Promise<void>}
+	 */
+	async run() {
+		return this.runAction().catch(err => {
+			core.error(err)
+			core.setFailed(err)
+		})
+	}
+
+	/**
+	 * Performs the action's work
+	 * @returns {Promise<void>}
+	 */
+	async runAction() {
+		throw new Error('Subclasses must implement runAction')
+	}
+
+	/**
+	 * Executes a command using FS.exec and performs logging and dry run logic.
+	 *
+	 * @param cmd
+	 *
+	 * @returns {Promise<string>}
+	 */
+	async exec(cmd) {
+		if (dryRun) {
+			core.info(`dry run: ${cmd}`)
+		} else {
+			core.info(`Running: ${cmd}`)
+			const { stdout, stderr } = await exec(cmd);
+			if (stderr) {
+				core.info(stderr)
+			}
+			return stdout.toString().trim()
+		}
+	}
+
+	/**
+	 * Make a GitHub API request using the octokit instance.
+	 * If the action did not specify a 'repo-token' input this will fail.
+	 *
+	 * @param {Function} apiFn (octokit.rest, opts) => {}
+	 * @param {Object} opts The options to apply to the api call in addition to the base options
+	 * @param {String} [label=''] Optionally label the operation in the log output
+	 * @returns {Promise<void>}
+	 */
+	async execRest(apiFn, opts, label = '') {
+		if (octokit && repoOwnerParams) {
+			const allOptions = {...repoOwnerParams, ...opts}
+			core.debug(`Invoking octokit rest api ${label}: ${JSON.stringify(opts)}`)
+			return await apiFn(octokit.rest, allOptions)
+		} else {
+			throw new Error(`octokit is not initialized! Did the action specify the required 'repo-token'?`)
+		}
+	}
+
+
+}
+
+module.exports = BaseAction
+
+/***/ }),
+
 /***/ 1917:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -4080,14 +4179,17 @@ const ISSUE_REGEX = /#(\d{3,})/g
 const BRANCH_ISSUE_REGEX = /(\d{3,})/g
 
 /**
+ * Common algorithm for finding an issue number:
+ * 1. From the commit messages
+ * 2. From the PR title
+ * 3. From the branch name
  *
- * @param {Octokit} octokit https://octokit.github.io/rest.js/v18#usage
- * @param {Object} repoOwnerParams passed on all octokit calls
+ * @param {BaseAction} action
  * @param {Object} pull_request from the event
  *
  * @returns {Promise<string>} The issue number
  */
-async function findIssueNumber({octokit, repoOwnerParams, pull_request}) {
+async function findIssueNumber({action, pull_request}) {
 
 	const { number: pull_number, title, head } = pull_request
 	const prBranch = head.ref
@@ -4105,12 +4207,11 @@ async function findIssueNumber({octokit, repoOwnerParams, pull_request}) {
 
 	let issueNumber
 	// First, Look at the commits
-	const opts = {
-		...repoOwnerParams,
-		pull_number
-	};
-	console.log(`Fetching commits for ${JSON.stringify(opts)}`)
-	const commits = await octokit.rest.pulls.listCommits(opts)
+	const commits = await action.execRest(
+		(api, opts) => api.pulls.listCommits(opts),
+		{ pull_number },
+		'Fetching commits for'
+	)
 	const commitMessages = commits.data.map(c => c.commit.message).reverse()
 	console.log('commit messages:', commitMessages)
 
@@ -4138,8 +4239,10 @@ module.exports = findIssueNumber
 
 const configReader = __nccwpck_require__(1917)
 const findIssueNumber = __nccwpck_require__(6036)
+const BaseAction = __nccwpck_require__(7008)
 
 module.exports = {
+	BaseAction,
 	configReader,
 	findIssueNumber
 }
@@ -8631,21 +8734,17 @@ module.exports = JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45,46],"valid"]
 var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
-// Node
-const { exec } = __nccwpck_require__(2081)
-
 // Third-Party
 // https://github.com/actions/toolkit/tree/main/packages/core#annotations
 const core = __nccwpck_require__(8460)
 const github = __nccwpck_require__(8369)
 
 // Shared modules
-const { configReader } = __nccwpck_require__(6139)
+const { configReader, BaseAction } = __nccwpck_require__(6139)
 
 // Inputs
 const configFile = core.getInput('config-file', { required: true });
 const versionFile = core.getInput('version-file', { required: true });
-const dryRun = core.getInput('dry-run');
 
 const context = github.context;
 const { before, head_commit, ref } = context.payload
@@ -8655,46 +8754,44 @@ core.info(`Base branch name '${baseBranch}' was extracted from ${ref}`)
 
 const configData = configReader(configFile, { baseBranch })
 
-async function execCmd(cmd) {
-	if (dryRun) {
-		core.info(`dry run: ${cmd}`)
-	} else {
-		core.info(`Running: ${cmd}`)
-		const response = await exec(cmd)
-		return response.toString().trim()
-	}
-}
 
-async function runAction() {
+class VersionWatcherAction extends BaseAction {
 
-	// Is it the only file changed?
-	const filesChanged = await execCmd(`git diff ${before}...${head_commit.id} --name-only | wc 1`)
-	if (filesChanged > 1) {
-		core.warning("Multiple files detected in diff")
-		return // Don't fail the action, just exit successfully
-	}
+	async runAction() {
 
-	// Merge forward always keeping the latest branch's version
-	const targets = configData.mergeTargets
-	for await (const branch of targets) {
-		await execCmd(`git checkout ${branch}`)
-		// stage the changes
-		await execCmd(`git merge ${head_commit.id} --no-commit`)
-		// revert any changes to the version file
-		await execCmd(`git checkout --ours ${versionFile}`)
-		const conflicts = await execCmd(`git diff --name-only --diff-filter=U`)
-		// Whoops, there are conflicts that require a human, abort
-		if (conflicts && conflicts.length > 0) {
-			core.warning(`Conflicts found:\n`, conflicts)
-			return
+		// Is it the only file changed?
+		const filesChanged = await this.exec(`git diff ${before}...${head_commit.id} --name-only | wc -l`)
+		if (filesChanged > 1) {
+			core.warning("Multiple files detected in diff")
+			return // Don't fail the action, just exit successfully
+		}
+
+		// Merge forward always keeping the latest branch's version
+		const targets = configData.mergeTargets
+		for await (const branch of targets) {
+			await this.exec(`git checkout ${branch}`)
+			await this.exec(`git pull`)
+			// stage the changes
+			await this.exec(`git merge ${head_commit.id} --no-commit`)
+			// revert any changes to the version file
+			await this.exec(`git checkout --ours ${versionFile}`)
+			// See if we still have conflicts remaining
+			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
+			// Whoops, there are conflicts that require a human, abort
+			if (conflicts && conflicts.length > 0) {
+				core.warning(`Conflicts found:\n${conflicts}`)
+				return
+			}
+			// clean up index before moving on to next branch
+			await this.exec(`git reset --hard`)
+
 		}
 	}
 }
 
-return runAction().catch(err => {
-	core.error(err)
-	core.setFailed(err)
-})
+
+return new VersionWatcherAction().run()
+
 
 })();
 
