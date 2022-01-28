@@ -27,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: git show origin/sp:.spider-merge-bot-config.json > config.json
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - run: git show ${{ github.event.repository.default_branch }}:.spider-merge-bot-config.json > config.json
       - uses: SpiderStrategies/gh-action-version-watcher@master
         with:
           config-file: config.json
