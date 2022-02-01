@@ -39,6 +39,7 @@ class VersionWatcherAction extends BaseAction {
 			await this.exec(`git merge ${head_commit.id} --no-commit`)
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${versionFile}`)
+			await this.exec(`git add ${versionFile}`)
 			// See if we still have conflicts remaining
 			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
 			// Whoops, there are conflicts that require a human, abort
