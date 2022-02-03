@@ -9,6 +9,7 @@ const { configReader, BaseAction } = require('gh-action-components')
 // Inputs
 const configFile = core.getInput('config-file', { required: true });
 const versionFile = core.getInput('version-file', { required: true });
+const dryRun = core.getInput('dry-run');
 
 const context = github.context;
 const { before, head_commit, ref } = context.payload
@@ -28,6 +29,14 @@ class VersionWatcherAction extends BaseAction {
 		if (filesChanged > 1) {
 			core.warning("Multiple files detected in diff")
 			return // Don't fail the action, just exit successfully
+		}
+
+		if (!dryRun) {
+			const username = `Version Watcher Bot`
+			const userEmail = `version-watcher-bot@spiderstrategies.com`
+			core.info(`Assigning git identity to ${username} <${userEmail}>`)
+			await this.exec(`git config user.email "${userEmail}"`)
+			await this.exec(`git config user.name "${username}"`)
 		}
 
 		// Merge forward always keeping the latest branch's version
