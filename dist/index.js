@@ -4031,7 +4031,7 @@ class BaseAction {
 	 */
 	async run() {
 		return this.runAction().catch(err => {
-			core.error(err)
+			core.error(`Caught error in runAction(): ${err}`)
 			core.setFailed(err)
 		})
 	}
@@ -4099,11 +4099,25 @@ const { readFileSync } = __nccwpck_require__(7147)
  * @typedef Configuration
  *
  * @property {Object} config The config object as it was provided
+ * @property {Object} config.branches
+ * "branches": {
+ *     "release-2020-commercial": {
+ *       "alias": "2020",
+ *       "milestoneNumber": 1
+ *     },
+ *     ...
+ * }
  *
  * @property {Array<String>} mergeTargets An ordered array of branches that a
  * change should be merged forward into. (e.g. releases in chronological order)
  *
- * @property {Object} branchNameByMilestoneNumber e.g. { 1: 'release-2022' }
+ * @property {Object} branchNameByMilestoneNumber
+ * A mapping of milestoneNumber to the release branch the milestone is assigned to.
+ * e.g. { 1: 'release-2022' }
+ *
+ * @property {Object} branchByAlias
+ * A mapping of the branch alias to the branch object
+ * e.g. { '2021-sp': {branchAttributes...} }
  */
 
 /**
@@ -4117,9 +4131,20 @@ const { readFileSync } = __nccwpck_require__(7147)
 function configReader(configFileLocation, options = {}) {
 	const config = JSON.parse(readFileSync(configFileLocation))
 
+	const branchNameByMilestoneNumber = {}
+	const branchByAlias = {}
+
+	Object.entries(config.branches).forEach(entry => {
+		const [branchName, props] = entry;
+		const { alias, milestoneNumber } = props
+		branchNameByMilestoneNumber[milestoneNumber] = branchName
+		branchByAlias[alias] = { name: branchName, ...props }
+	})
+
 	const data = {
 		mergeTargets: buildMergeTargets(config, options),
-		branchNameByMilestoneNumber: branchNameByMilestone(config)
+		branchByAlias,
+		branchNameByMilestoneNumber
 	}
 
 	return {
@@ -4139,34 +4164,6 @@ function buildMergeTargets(config, options) {
 
 	return mergeTargets
 }
-
-/**
- * Get a mapping of milestonNumber to the release branch the milestone is assigned to.
- *
- * @param {Object} config.branches
- * "branches": {
- *     "release-2020-commercial": {
- *       "alias": "2020",
- *       "milestoneNumber": 1
- *     },
- *     ...
- * }
- *
- * @returns {Object}
- * {
- *     1: "release-2020-commercial"
- * }
- */
-function branchNameByMilestone(config) {
-	const returnValue = {}
-	Object.entries(config.branches).forEach(entry => {
-		const [branchName, props] = entry;
-		const { milestoneNumber } = props
-		returnValue[milestoneNumber] = branchName
-	})
-	return returnValue
-}
-
 
 module.exports = configReader
 
@@ -8760,6 +8757,8 @@ class VersionWatcherAction extends BaseAction {
 
 	async runAction() {
 
+		await this.switchToBranch(baseBranch)
+
 		// Is it the only file changed?
 		const filesChanged = await this.exec(`git diff ${before}...${head_commit.id} --name-only | wc -l`)
 		if (filesChanged > 1) {
@@ -8777,25 +8776,61 @@ class VersionWatcherAction extends BaseAction {
 
 		// Merge forward always keeping the latest branch's version
 		const targets = configData.mergeTargets
+
 		for await (const branch of targets) {
-			await this.exec(`git checkout ${branch}`)
-			await this.exec(`git pull`)
+			core.startGroup(`Merge into: ${branch}`)
+			await this.switchToBranch(branch)
 			// stage the changes
-			await this.exec(`git merge ${head_commit.id} --no-commit`)
+			try {
+				const mergeOutput = await this.exec(`git merge ${head_commit.id} --no-commit -v`)
+				core.info(mergeOutput)
+			} catch (e) {
+				// Don't know why this throws an error, but it's "expected"
+				core.info(`Ignored: ${e}`)
+				core.info(await this.exec(`git status`))
+			}
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${versionFile}`)
 			await this.exec(`git add ${versionFile}`)
+
 			// See if we still have conflicts remaining
 			const conflicts = await this.exec(`git diff --name-only --diff-filter=U`)
+
 			// Whoops, there are conflicts that require a human, abort
 			if (conflicts && conflicts.length > 0) {
 				core.warning(`Conflicts found:\n${conflicts}`)
+				core.setFailed(`Version bump could not be auto merged because ` +
+					`other conflicting changes exist between \`${baseBranch}\` and \`${branch}\`.  ` +
+					`Someone will need to resolve the version.properties merge manually.`)
+				core.endGroup()
 				return
 			}
+
+			// Push the merge
+			const versionSha = head_commit.id.substring(0,7)
+			const msg = `merged ${baseBranch} (${versionSha}) version.properties bump into ${branch}`
+			await this.exec(`git commit -m "${msg}"`)
+			await this.exec(`git push`)
+
 			// clean up index before moving on to next branch
 			await this.exec(`git reset --hard`)
-
+			core.endGroup()
 		}
+	}
+
+	/**
+	 * The checkout action doesn't get the full depth of a single branch.
+	 * So we do it ourselves as needed
+	 * https://github.com/SpiderStrategies/Scoreboard/issues/44243#issuecomment-1029052764
+	 * @param branch
+	 * @returns {Promise<void>}
+	 */
+	async switchToBranch(branch) {
+		// --progress pollutes logs
+		await this.exec(`git fetch --prune origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"`)
+		await this.exec(`git checkout --force -B ${branch} refs/remotes/origin/${branch}`)
+		// const output = await this.exec(`git log -3 --pretty=format:"%h %d %s"`)
+		// core.info(output)
 	}
 }
 
