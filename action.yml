@@ -7,6 +7,9 @@ inputs:
  version-file:
    description: 'The location of the version file relative to the root of the repo'
    required: true
+ repo-token:
+   description: 'The github token'
+   required: true
  dry-run:
    description: 'Setting dry-run to true will prevent the action from executing git commands with side effects and instead just log what it would have run.'
    required: false
