@@ -44,12 +44,13 @@ class VersionWatcherAction extends BaseAction {
 		// Merge forward always keeping the latest branch's version
 		const targets = configData.mergeTargets
 
+		let commitShaToMerge = head_commit.id
 		for await (const branch of targets) {
 			core.startGroup(`Merge into: ${branch}`)
 			await this.switchToBranch(branch)
 			// stage the changes
 			try {
-				const mergeOutput = await this.exec(`git merge ${head_commit.id} --no-commit -v`)
+				const mergeOutput = await this.exec(`git merge ${commitShaToMerge} --no-commit -v`)
 				core.info(mergeOutput)
 			} catch (e) {
 				// Don't know why this throws an error, but it's "expected"
@@ -78,6 +79,9 @@ class VersionWatcherAction extends BaseAction {
 			const msg = `merged ${baseBranch} (${versionSha}) version.properties bump into ${branch}`
 			await this.exec(`git commit -m "${msg}"`)
 			await this.exec(`git push`)
+
+			// Get the new commit sha for the next merge
+			commitShaToMerge = await this.exec(`git rev-parse HEAD`)
 
 			// clean up index before moving on to next branch
 			await this.exec(`git reset --hard`)

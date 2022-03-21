@@ -3996,21 +3996,12 @@ exports.Deprecation = Deprecation;
 
 const util = __nccwpck_require__(3837)
 const exec = util.promisify((__nccwpck_require__(2081).exec))
+const {writeFile} = __nccwpck_require__(3292)
 
-
-const core = __nccwpck_require__(2186)
 const github = __nccwpck_require__(5438)
-
-const dryRun = core.getInput('dry-run');
 const context = github.context;
 const { repository } = context.payload
 
-// Setup Octokit
-let octokit
-const repoToken = core.getInput('repo-token')
-if (repoToken) {
-	octokit = github.getOctokit(repoToken)
-}
 // If the event has a repository extract the attributes
 let repoOwnerParams = {}
 if (repository) {
@@ -4025,15 +4016,35 @@ if (repository) {
  */
 class BaseAction {
 
+	constructor() {
+		// https://github.com/actions/toolkit/tree/main/packages/core#annotations
+		this.core = __nccwpck_require__(2186)
+
+		// Setup Octokit
+		const repoToken = this.core.getInput('repo-token')
+		if (repoToken) {
+			this.octokit = github.getOctokit(repoToken)
+		}
+	}
+
 	/**
 	 * Runs the action
 	 * @returns {Promise<void>}
 	 */
 	async run() {
-		return this.runAction().catch(err => {
-			core.error(`Caught error in runAction(): ${err}`)
-			core.setFailed(err)
-		})
+		return this.runAction().catch(async err => await this.onError(err))
+	}
+
+	/**
+	 * Subclasses can override this function to do additional actions when an
+	 * (uncaught) error occurs.
+	 *
+	 * @param err
+	 * @returns {Promise<void>}
+	 */
+	async onError(err) {
+		this.core.error(err)
+		this.core.setFailed(err)
 	}
 
 	/**
@@ -4052,16 +4063,22 @@ class BaseAction {
 	 * @returns {Promise<string>}
 	 */
 	async exec(cmd) {
-		if (dryRun) {
-			core.info(`dry run: ${cmd}`)
+		if (this.core.getInput('dry-run')) {
+			this.core.info(`dry run: ${cmd}`)
 		} else {
-			core.info(`Running: ${cmd}`)
+			this.core.info(`Running: ${cmd}`)
 			const { stdout, stderr } = await exec(cmd);
 			if (stderr) {
-				core.info(stderr)
+				this.core.info(stderr)
 			}
 			return stdout.toString().trim()
 		}
+	}
+
+	async execQuietly(cmd) {
+		try {
+			return await this.exec(cmd)
+		} catch(e) {}
 	}
 
 	/**
@@ -4074,16 +4091,41 @@ class BaseAction {
 	 * @returns {Promise<void>}
 	 */
 	async execRest(apiFn, opts, label = '') {
-		if (octokit && repoOwnerParams) {
+		if (this.octokit && repoOwnerParams) {
 			const allOptions = {...repoOwnerParams, ...opts}
-			core.debug(`Invoking octokit rest api ${label}: ${JSON.stringify(opts)}`)
-			return await apiFn(octokit.rest, allOptions)
+			this.core.debug(`Invoking octokit rest api ${label}: ${JSON.stringify(opts)}`)
+			return await apiFn(this.octokit.rest, allOptions)
 		} else {
 			throw new Error(`octokit is not initialized! Did the action specify the required 'repo-token'?`)
 		}
 	}
 
+	async commit(message) {
+		// Write to a file to avoid escaping nightmares
+		await writeFile('.commitmsg', message)
+		await this.exec(`git commit --file=.commitmsg`)
+		await this.exec(`git push`)
+	}
 
+	async createBranch(name, sha) {
+		await this.exec(`git checkout -b ${name} ${sha}`)
+		await this.exec(`git push --set-upstream origin ${name}`)
+	}
+
+	async deleteBranch(name) {
+		return this.execQuietly(`git push origin --delete ${name}`)
+	}
+
+	async logError(e, prefix = 'Error Detected') {
+		// the stack has the stderr output in it, so we don't want to log the full
+		// error object or we get buffers and redundant information
+		const { stack, status, stdout = {} } = e
+		this.core.warning(`${prefix}:\n`,
+			`status: ${status}\n`,
+			`stack: ${stack}\n`,
+			`stdout: ${stdout.toString()}`
+		)
+	}
 }
 
 module.exports = BaseAction
@@ -4133,23 +4175,27 @@ function configReader(configFileLocation, options = {}) {
 
 	const branchNameByMilestoneNumber = {}
 	const branchByAlias = {}
-
-	Object.entries(config.branches).forEach(entry => {
+	const branches = config.branches
+	Object.entries(branches).forEach(entry => {
 		const [branchName, props] = entry;
 		const { alias, milestoneNumber } = props
 		branchNameByMilestoneNumber[milestoneNumber] = branchName
 		branchByAlias[alias] = { name: branchName, ...props }
 	})
 
-	const data = {
+	return {
+		// State
+		config,
+		branches,
 		mergeTargets: buildMergeTargets(config, options),
 		branchByAlias,
-		branchNameByMilestoneNumber
-	}
-
-	return {
-		config,
-		...data
+		branchNameByMilestoneNumber,
+		// Functions
+		/**
+		 * @param {String} branch the full branch name
+		 * @returns {String} the branch alias
+		 */
+		getBranchAlias: branch => config.branches[branch].alias,
 	}
 }
 
@@ -4238,11 +4284,44 @@ const configReader = __nccwpck_require__(4302)
 const findIssueNumber = __nccwpck_require__(4625)
 const BaseAction = __nccwpck_require__(947)
 
+const mockCore = __nccwpck_require__(6874)
+
 module.exports = {
 	BaseAction,
 	configReader,
-	findIssueNumber
+	findIssueNumber,
+	// Test Utils
+	mockCore
 }
+
+/***/ }),
+
+/***/ 6874:
+/***/ ((module) => {
+
+/**
+ * Mocks the GitHub Action core API so we can inspect it during tests.
+ *
+ * @param {Object} [options.inputs] Key/Value pairs
+ */
+function mockCore(options = {}) {
+	const mockCore = {
+		infoMsgs: [],
+		debugMsgs: [],
+		warningMsgs: [],
+		outputs: {},
+		error: err => mockCore.errorArg = err,
+		setFailed: err => mockCore.failedArg = err,
+		info: msg => mockCore.infoMsgs.push(msg),
+		debug: msg => mockCore.debugMsgs.push(msg),
+		warning: msg => mockCore.warningMsgs.push(msg),
+		getInput: name => options.inputs && options.inputs[name],
+		setOutput: (name, value) => mockCore.outputs[name] = value
+	}
+	return mockCore
+}
+
+module.exports = mockCore
 
 /***/ }),
 
@@ -8594,6 +8673,14 @@ module.exports = require("fs");
 
 /***/ }),
 
+/***/ 3292:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("fs/promises");
+
+/***/ }),
+
 /***/ 3685:
 /***/ ((module) => {
 
@@ -8777,12 +8864,13 @@ class VersionWatcherAction extends BaseAction {
 		// Merge forward always keeping the latest branch's version
 		const targets = configData.mergeTargets
 
+		let commitShaToMerge = head_commit.id
 		for await (const branch of targets) {
 			core.startGroup(`Merge into: ${branch}`)
 			await this.switchToBranch(branch)
 			// stage the changes
 			try {
-				const mergeOutput = await this.exec(`git merge ${head_commit.id} --no-commit -v`)
+				const mergeOutput = await this.exec(`git merge ${commitShaToMerge} --no-commit -v`)
 				core.info(mergeOutput)
 			} catch (e) {
 				// Don't know why this throws an error, but it's "expected"
@@ -8811,6 +8899,9 @@ class VersionWatcherAction extends BaseAction {
 			const msg = `merged ${baseBranch} (${versionSha}) version.properties bump into ${branch}`
 			await this.exec(`git commit -m "${msg}"`)
 			await this.exec(`git push`)
+
+			// Get the new commit sha for the next merge
+			commitShaToMerge = await this.exec(`git rev-parse HEAD`)
 
 			// clean up index before moving on to next branch
 			await this.exec(`git reset --hard`)
