@@ -1,6 +1,6 @@
 {
   "name": "version-watcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,7 +9,7 @@
   "dependencies": {
     "@actions/core": "^1.6.0",
     "@actions/github": "^5.0.0",
-    "gh-action-components": "git+ssh://git@github.com/SpiderStrategies/gh-action-components#f732920ae39181f16e242bcf40313b9c6e186d93"
+    "gh-action-components": "git+ssh://git@github.com/SpiderStrategies/gh-action-components#3cfed14172983b072452cb58f4cf232616f8b79d"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.33.1"
