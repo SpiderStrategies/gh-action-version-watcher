@@ -26,7 +26,7 @@ jobs:
   version-watcher:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.repository.default_branch }}
       - run: git show ${{ github.event.repository.default_branch }}:.spider-merge-bot-config.json > config.json
