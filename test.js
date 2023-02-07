@@ -1,13 +1,9 @@
 const test = require('node:test')
 const assert = require('node:assert')
-const VersionWatcher = require('./version-watcher')
-
-class ActionStub extends VersionWatcher {
-
-}
+const VersionWatcherAction = require('./version-watcher')
 
 test('dies gracefully if running on a branch that was deleted', async t => {
-  let action = new ActionStub({
+  let action = new VersionWatcherAction({
     baseBranch: 'mock-branch',
   })
 
