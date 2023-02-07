@@ -12,6 +12,8 @@ class VersionWatcherAction extends BaseAction {
     try {
       await this.switchToBranch(this.options.baseBranch)
     } catch (e) {
+      // The branch is no longer around. See https://github.com/SpiderStrategies/Scoreboard/issues/51812
+      // Die gracefully
       return
     }
 
