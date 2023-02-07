@@ -19,6 +19,8 @@ core.info(`Base branch name '${baseBranch}' was extracted from ${ref}`)
 
 const configData = configReader(configFile, { baseBranch })
 
+const VersionWatcherAction = require('./version-watcher')
+
 return new VersionWatcherAction({
 	configData,
 	baseBranch,
