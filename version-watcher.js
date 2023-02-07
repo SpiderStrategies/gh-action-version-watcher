@@ -20,14 +20,14 @@ class VersionWatcherAction extends BaseAction {
 		// Is it the only file changed?
 		const filesChanged = await this.exec(`git diff ${this.options.before}...${this.options.head_commit.id} --name-only | wc -l`)
 		if (filesChanged > 1) {
-			core.warning("Multiple files detected in diff")
+			this.core.warning("Multiple files detected in diff")
 			return // Don't fail the action, just exit successfully
 		}
 
 		if (!this.options.dryRun) {
 			const username = `Version Watcher Bot`
 			const userEmail = `version-watcher-bot@spiderstrategies.com`
-			core.info(`Assigning git identity to ${username} <${userEmail}>`)
+			this.core.info(`Assigning git identity to ${username} <${userEmail}>`)
 			await this.exec(`git config user.email "${userEmail}"`)
 			await this.exec(`git config user.name "${username}"`)
 		}
@@ -37,16 +37,16 @@ class VersionWatcherAction extends BaseAction {
 
 		let commitShaToMerge = this.options.head_commit.id
 		for await (const branch of targets) {
-			core.startGroup(`Merge into: ${branch}`)
+			this.core.startGroup(`Merge into: ${branch}`)
 			await this.switchToBranch(branch)
 			// stage the changes
 			try {
 				const mergeOutput = await this.exec(`git merge ${commitShaToMerge} --no-commit -v`)
-				core.info(mergeOutput)
+				this.core.info(mergeOutput)
 			} catch (e) {
 				// Don't know why this throws an error, but it's "expected"
-				core.info(`Ignored: ${e}`)
-				core.info(await this.exec(`git status`))
+				this.core.info(`Ignored: ${e}`)
+				this.core.info(await this.exec(`git status`))
 			}
 			// revert any changes to the version file
 			await this.exec(`git checkout --ours ${this.options.versionFile}`)
@@ -57,11 +57,11 @@ class VersionWatcherAction extends BaseAction {
 
 			// Whoops, there are conflicts that require a human, abort
 			if (conflicts && conflicts.length > 0) {
-				core.warning(`Conflicts found:\n${conflicts}`)
-				core.setFailed(`Version bump could not be auto merged because ` +
+				this.core.warning(`Conflicts found:\n${conflicts}`)
+				this.core.setFailed(`Version bump could not be auto merged because ` +
 					`other conflicting changes exist between \`${this.options.baseBranch}\` and \`${branch}\`.  ` +
 					`Someone will need to resolve the version.properties merge manually.`)
-				core.endGroup()
+				this.core.endGroup()
 				return
 			}
 
@@ -76,7 +76,7 @@ class VersionWatcherAction extends BaseAction {
 
 			// clean up index before moving on to next branch
 			await this.exec(`git reset --hard`)
-			core.endGroup()
+			this.core.endGroup()
 		}
 	}
 
@@ -92,7 +92,7 @@ class VersionWatcherAction extends BaseAction {
 		await this.exec(`git fetch --prune origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"`)
 		await this.exec(`git checkout --force -B ${branch} refs/remotes/origin/${branch}`)
 		// const output = await this.exec(`git log -3 --pretty=format:"%h %d %s"`)
-		// core.info(output)
+		// this.core.info(output)
 	}
 }
 
