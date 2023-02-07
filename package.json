@@ -13,6 +13,6 @@
     "gh-action-components": "git+ssh://git@github.com/SpiderStrategies/gh-action-components#3cfed14172983b072452cb58f4cf232616f8b79d"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.33.1"
+    "@vercel/ncc": "^0.36.1"
   }
 }
